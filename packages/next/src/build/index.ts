@@ -171,6 +171,7 @@ interface ExperimentalPPRInfo {
 
 interface DataRouteRouteInfo {
   dataRoute: string | null
+  prefetchDataRoute: string | null | undefined
 }
 
 export interface SsgRoute
@@ -187,9 +188,10 @@ export interface DynamicSsgRoute
   extends ExperimentalBypassForInfo,
     DataRouteRouteInfo,
     ExperimentalPPRInfo {
-  routeRegex: string
   fallback: string | null | false
+  routeRegex: string
   dataRouteRegex: string | null
+  prefetchDataRouteRegex: string | null | undefined
 }
 
 export type PrerenderManifest = {
@@ -2291,6 +2293,13 @@ export default async function build(
                   dataRoute = path.posix.join(`${normalizedRoute}${RSC_SUFFIX}`)
                 }
 
+                let prefetchDataRoute: string | null | undefined
+                if (experimentalPPR) {
+                  prefetchDataRoute = path.posix.join(
+                    `${normalizedRoute}${RSC_PREFETCH_SUFFIX}`
+                  )
+                }
+
                 const routeMeta: Partial<SsgRoute> = {}
 
                 if (metadata.status !== 200) {
@@ -2329,6 +2338,7 @@ export default async function build(
                   initialRevalidateSeconds: revalidate,
                   srcRoute: page,
                   dataRoute,
+                  prefetchDataRoute,
                 }
               } else {
                 hasDynamicData = true
@@ -2344,7 +2354,16 @@ export default async function build(
 
             if (!hasDynamicData && isDynamicRoute(originalAppPath)) {
               const normalizedRoute = normalizePagePath(page)
-              const dataRoute = path.posix.join(`${normalizedRoute}.rsc`)
+              const dataRoute = path.posix.join(
+                `${normalizedRoute}${RSC_SUFFIX}`
+              )
+
+              let prefetchDataRoute: string | null | undefined
+              if (experimentalPPR) {
+                prefetchDataRoute = path.posix.join(
+                  `${normalizedRoute}${RSC_PREFETCH_SUFFIX}`
+                )
+              }
 
               pageInfos.set(page, {
                 ...(pageInfos.get(page) as PageInfo),
@@ -2373,6 +2392,19 @@ export default async function build(
                         false
                       ).re.source.replace(/\(\?:\\\/\)\?\$$/, '\\.rsc$')
                     ),
+                prefetchDataRoute,
+                prefetchDataRouteRegex:
+                  isRouteHandler || !prefetchDataRoute
+                    ? undefined
+                    : normalizeRouteRegex(
+                        getNamedRouteRegex(
+                          prefetchDataRoute.replace(/\.prefetch\.rsc$/, ''),
+                          false
+                        ).re.source.replace(
+                          /\(\?:\\\/\)\?\$$/,
+                          '\\.prefetch\\.rsc$'
+                        )
+                      ),
               }
             }
           }
@@ -2596,6 +2628,7 @@ export default async function build(
                         buildId,
                         `${file}.json`
                       ),
+                      prefetchDataRoute: undefined,
                     }
                   }
                 } else {
@@ -2609,6 +2642,8 @@ export default async function build(
                       buildId,
                       `${file}.json`
                     ),
+                    // Pages does not have a prefetch data route.
+                    prefetchDataRoute: undefined,
                   }
                 }
                 // Set Page Revalidation Interval
@@ -2677,6 +2712,8 @@ export default async function build(
                       buildId,
                       `${normalizePagePath(route)}.json`
                     ),
+                    // Pages does not have a prefetch data route.
+                    prefetchDataRoute: undefined,
                   }
 
                   // Set route Revalidation Interval
@@ -2768,6 +2805,9 @@ export default async function build(
                 false
               ).re.source.replace(/\(\?:\\\/\)\?\$$/, '\\.json$')
             ),
+            // Pages does not have a prefetch data route.
+            prefetchDataRoute: undefined,
+            prefetchDataRouteRegex: undefined,
           }
         })
         const prerenderManifest: Readonly<PrerenderManifest> = {
